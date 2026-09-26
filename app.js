@@ -5,15 +5,17 @@
   const DEFAULT_ORIGIN = "https://bryans-macbook-pro-1.tail1ed408.ts.net:8712";
   const onPages = location.hostname.endsWith("github.io");
 
-  (function ingestHash() {
-    const raw = location.hash.slice(1);
-    if (!raw.startsWith("cfg=")) return;
+  (function ingestCfg() {
+    const query = new URLSearchParams(location.search).get("cfg");
+    const hash = location.hash.startsWith("#cfg=") ? location.hash.slice(5) : "";
+    const raw = query || (hash ? decodeURIComponent(hash) : "");
+    if (!raw) return;
     try {
-      const cfg = JSON.parse(decodeURIComponent(raw.slice(4)));
+      const cfg = JSON.parse(raw);
       if (cfg.api) localStorage.setItem(ORIGIN_KEY, String(cfg.api).replace(/\/$/, ""));
       if (cfg.token) localStorage.setItem(TOKEN_KEY, String(cfg.token));
     } catch (_) { /* bad cfg */ }
-    history.replaceState(null, "", location.pathname + location.search);
+    history.replaceState(null, "", location.pathname);
   })();
 
   let origin = localStorage.getItem(ORIGIN_KEY) || (onPages ? DEFAULT_ORIGIN : "");

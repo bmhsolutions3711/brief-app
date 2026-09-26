@@ -1,4 +1,4 @@
-const VERSION = "brief-shell-v2";
+const VERSION = "brief-shell-v3";
 
 self.addEventListener("install", (e) => {
   e.waitUntil(self.skipWaiting());

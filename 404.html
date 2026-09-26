@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Brief</title>
+  <script>
+    var path = decodeURIComponent(location.pathname);
+    var at = path.indexOf("cfg=");
+    if (at >= 0) {
+      location.replace("/brief-app/?" + path.slice(at));
+    } else {
+      location.replace("/brief-app/" + location.search + location.hash);
+    }
+  </script>
+</head>
+<body>Opening Brief.</body>
+</html>
