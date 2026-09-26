@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#030814" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Brief" />
+  <title>Brief</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="icon-192.png" type="image/png" />
+  <link rel="apple-touch-icon" href="icon-180.png" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-state="boot">
+  <div class="grain" aria-hidden="true"></div>
+  <section class="connect" id="connect" hidden>
+    <p class="kicker">The record</p>
+    <h1>Brief</h1>
+    <p class="lead">Scan the QR on the Pro. Or paste the token once.</p>
+    <form id="connectForm" autocomplete="off">
+      <label class="sr" for="tokenIn">Token</label>
+      <input id="tokenIn" type="password" enterkeyhint="go" autocapitalize="off" autocomplete="off" spellcheck="false" />
+      <button type="submit" class="act primary">Sit down</button>
+    </form>
+    <p class="err" id="connectErr" hidden></p>
+  </section>
+  <header class="rail">
+    <div class="who">
+      <span class="pip" id="pip" data-on="0"></span>
+      <span class="name">Brief</span>
+      <button type="button" class="ver" id="ver" title="Tap to pull an update">v2</button>
+      <span class="why" id="why">waking</span>
+    </div>
+    <button type="button" class="act" id="pullBtn">Pull</button>
+  </header>
+  <div class="tools" id="beats"></div>
+  <main class="cab">
+    <div class="presence" aria-hidden="true">
+      <i class="backglow"></i>
+      <svg class="visor" viewBox="0 0 200 200">
+        <circle class="ring outer" cx="100" cy="100" r="94" />
+        <circle class="ring inner" cx="100" cy="100" r="84" />
+        <g class="ticks">
+          <line x1="100" y1="4" x2="100" y2="14" />
+          <line x1="100" y1="186" x2="100" y2="196" />
+          <line x1="4" y1="100" x2="14" y2="100" />
+          <line x1="186" y1="100" x2="196" y2="100" />
+        </g>
+        <path class="helm" d="M100 50c-26 0-42 22-44 46-2 26 10 46 24 54l-6 18 16 6 6-16c3 1 8 1 12 0l6 16 16-6-6-18c14-8 26-28 24-54-2-24-18-46-42-46z" />
+        <g class="trace">
+          <path d="M78 78h44M74 90h52M70 126h60M76 138h48" />
+          <path class="dim" d="M100 62v78" />
+        </g>
+        <path class="slit" d="M66 98c12-8 56-8 68 2l-6 12c-16 6-40 6-56 0z" />
+      </svg>
+    </div>
+    <section class="thread">
+      <header class="logbar">
+        <span class="logpip"></span>
+        <span id="logName">Record</span>
+        <span class="logend">Not a verdict</span>
+      </header>
+      <p class="gap" id="gap"></p>
+      <div class="figures" id="figures"></div>
+      <div class="reading" id="reading" hidden>
+        <span class="who">Reading · model · not the source</span>
+        <p id="readingBody"></p>
+      </div>
+      <ol class="ribbon" id="ribbon"></ol>
+      <p class="miss" id="miss"></p>
+    </section>
+  </main>
+  <footer class="armrest">
+    <button type="button" class="act primary read" id="playBtn">Play brief</button>
+  </footer>
+  <p class="err toast" id="err" hidden></p>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+  "id": "/brief-app/",
+  "name": "Brief",
+  "short_name": "Brief",
+  "description": "What was published. What is still unknown.",
+  "start_url": "/brief-app/",
+  "scope": "/brief-app/",
+  "display": "standalone",
+  "background_color": "#030814",
+  "theme_color": "#030814",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-180.png", "sizes": "180x180", "type": "image/png", "purpose": "any" }
+  ]
+}
