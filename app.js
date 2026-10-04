@@ -26,6 +26,9 @@
   let beat = (location.hash || "").replace(/^#/, "") || "sheet";
   let foldId = "";
   let letterOpen = false;
+  let coverAt = 0;
+  let coverEdition = "";
+  let stackOpen = false;
   let onPress = false;
   let lineOn = -1;
   let poll = null;
@@ -228,11 +231,37 @@
     return res;
   }
 
-  function foldLetter(rest, open) {
+  function foldLetter(rest, open, label, indexFrom) {
     if (!rest.length) return "";
     const on = open ? "1" : "0";
-    const lines = rest.map((s, i) => `<p class="line" data-on="${lineOn === i + 1 ? "1" : "0"}">${esc(s)}</p>`).join("");
-    return `<div class="fold" data-open="${on}"><button type="button" class="crease" data-fold="letter" data-open="${on}" aria-expanded="${open ? "true" : "false"}"><span class="kicker">Letter</span><span class="mark"><span class="hit">The rest of the letter</span></span><i class="pipette" aria-hidden="true"></i></button><div class="well" data-open="${on}"${open ? "" : " inert"}><div>${lines}</div></div></div>`;
+    const start = indexFrom || 0;
+    const lines = rest.map((s, i) => `<p class="line" data-on="${lineOn === start + i ? "1" : "0"}">${esc(s)}</p>`).join("");
+    return `<div class="fold" data-open="${on}"><button type="button" class="crease" data-fold="letter" data-open="${on}" aria-expanded="${open ? "true" : "false"}"><span class="kicker">Letter</span><span class="mark"><span class="hit">${esc(label || "The rest of the letter")}</span></span><i class="pipette" aria-hidden="true"></i></button><div class="well" data-open="${on}"${open ? "" : " inert"}><div>${lines}</div></div></div>`;
+  }
+
+  function stackOf(ed) {
+    const rows = [];
+    const push = (it) => {
+      if (!it || !it.title) return;
+      if (it.id && rows.some((row) => row.id === it.id)) return;
+      rows.push(it);
+    };
+    push(ed.lead);
+    for (const it of [...(ed.stories || []), ...(ed.also || [])]) push(it);
+    return rows;
+  }
+
+  function dial(stack) {
+    if (stack.length < 2) return "";
+    const prev = stack[(coverAt - 1 + stack.length) % stack.length];
+    const next = stack[(coverAt + 1) % stack.length];
+    const name = (it) => {
+      const cut = splitClaim(String(it.title || ""));
+      const hit = (cut && cut.hit) || String(it.title || "Sheet");
+      const words = hit.split(/\s+/).filter((w) => !/^(the|a|an)$/i.test(w));
+      return (words.length ? words : hit.split(/\s+/)).slice(0, 3).join(" ");
+    };
+    return `<nav class="dial" aria-label="Stories on this sheet"><button type="button" class="turn" data-turn="-1"><i aria-hidden="true">‹</i> ${esc(name(prev))}</button><span class="count"><b>${coverAt + 1}</b><i> / ${stack.length}</i></span><button type="button" class="turn" data-turn="1">${esc(name(next))} <i aria-hidden="true">›</i></button></nav>`;
   }
 
   function foldRow(it, bits) {
@@ -248,35 +277,61 @@
   }
 
   function paintSheet(ed, pressing) {
-    const lead = ed.lead;
-    const href = lead ? safeUrl(lead.url) : "";
-    const title = lead
-      ? (href ? `<a href="${esc(href)}" target="_blank" rel="noopener">${mark(lead.title)}</a>` : mark(lead.title))
+    const stack = stackOf(ed);
+    const eid = String(ed.id || "");
+    if (eid !== coverEdition) {
+      coverEdition = eid;
+      coverAt = 0;
+      stackOpen = false;
+    }
+    if (coverAt >= stack.length) coverAt = 0;
+    const story = stack[coverAt] || null;
+    const onLead = coverAt === 0;
+    const href = story ? safeUrl(story.url) : "";
+    const title = story
+      ? (href ? `<a href="${esc(href)}" target="_blank" rel="noopener">${mark(story.title)}</a>` : mark(story.title))
       : "Nothing on the record yet.";
-    const plate = lead && safeUrl(lead.image)
-      ? `<figure class="plate"><div class="frame"><img src="${esc(safeUrl(lead.image))}" alt="" referrerpolicy="no-referrer" onerror="this.closest('figure').dataset.dead='1'"></div><figcaption>${esc(lead.source || "")}</figcaption></figure>`
+    const plate = story && safeUrl(story.image)
+      ? `<figure class="plate"><div class="frame"><img src="${esc(safeUrl(story.image))}" alt="" referrerpolicy="no-referrer" onerror="this.closest('figure').dataset.dead='1'"></div><figcaption>${esc(story.source || "")}</figcaption></figure>`
       : "";
-    const by = lead ? `<span class="by">${esc(lead.source || "")}${lead.published ? " · " + esc(lead.published) : ""}</span>` : "";
+    const by = story ? `<span class="by">${esc(story.source || "")}${story.published ? " · " + esc(story.published) : ""}</span>` : "";
     const prints = (ed.prints || []).map((f) =>
       `<div class="print"><span class="k">${esc(f.label)}</span><b>${showNum(f.value)}</b>${track(f.series)}</div>`
     ).join("");
     const bits = sentences(ed.prose || "");
     const shown = letterOpen || lineOn > 0;
-    const letterBody = bits.length
-      ? `<p class="line" data-on="${lineOn === 0 ? "1" : "0"}">${esc(bits[0])}</p>${foldLetter(bits.slice(1), shown)}`
-      : `<p>${pressing ? "The letter is being set. The sections stay open while the press runs." : "The letter is not set."}</p>`;
-    const folds = [...(ed.stories || []), ...(ed.also || [])].map((it) => foldRow(it, bits)).join("");
+    const said = story ? sentenceFor(story, bits) : "";
+    let letterBody = "";
+    if (!bits.length) {
+      letterBody = `<p>${pressing ? "The letter is being set. The sections stay open while the press runs." : "The letter is not set."}</p>`;
+    } else if (onLead) {
+      letterBody = `<p class="line said" data-on="${lineOn === 0 ? "1" : "0"}">${esc(bits[0])}</p>${foldLetter(bits.slice(1), shown, "The rest of the letter", 1)}`;
+    } else {
+      letterBody = `${said ? `<p class="said">${esc(said)}</p>` : ""}${foldLetter(bits, shown, "The letter", 0)}`;
+    }
+    const rec = href ? `<a href="${esc(href)}" target="_blank" rel="noopener">The record</a>` : "";
+    const others = stack.filter((_, i) => i !== coverAt);
+    const folds = stackOpen ? others.map((it) => foldRow(it, bits)).join("") : "";
+    const stackBtn = others.length
+      ? `<button type="button" class="stackbtn" data-stack="1">${stackOpen ? "Close the stack" : "The other " + others.length}</button>`
+      : "";
     const banner = pressing
       ? `<p class="press">${esc(ed.label_now || ed.label || "This edition")} is on the press.<i></i></p>`
       : (!ed.current && ed.prose ? `<p class="press hold">Holding the last sheet until this edition is set.</p>` : "");
-    const section = (lead && (lead.kicker || lead.section)) || "The record";
-    const lower = folds ? `<div class="folds"><h2 class="colhead">On the sheet</h2>${folds}</div>` : "";
+    const section = (story && (story.kicker || story.section)) || "The record";
+    const lower = folds ? `<div class="folds">${folds}</div>` : "";
     $("sheet").innerHTML = `
       ${banner}
       <div class="folio"><p class="dateline">${esc(ed.when_now || ed.when || "")}</p></div>
-      <div class="hed"><span class="kicker">${esc(section)}</span><h1>${title}</h1>${by}</div>
+      <article class="cover">
+        ${plate}
+        <div class="hed"><span class="kicker">${esc(section)}</span><h1>${title}</h1>${by}</div>
+        <div class="letter">${letterBody}</div>
+        <p class="doors">${rec}<button type="button" class="hear">Hear this</button></p>
+        ${dial(stack)}
+      </article>
       ${prints ? `<div class="prints">${prints}</div>` : ""}
-      <div class="spread${plate ? "" : " spread-solo"}">${plate}<div class="letter">${letterBody}</div></div>
+      ${stackBtn}
       ${lower}
     `;
   }
@@ -442,7 +497,7 @@
       for (let i = 0; i < lines.length; i++) {
         if (gen !== seq) return;
         lineOn = i;
-        const nodes = document.querySelectorAll(".letter p");
+        const nodes = document.querySelectorAll(".letter p.line");
         nodes.forEach((p, n) => { p.dataset.on = n === i ? "1" : "0"; });
         if (nodes[i]) nodes[i].scrollIntoView({ block: "nearest" });
         await speakOne(lines[i], gen);
@@ -534,16 +589,56 @@
     }
   }
 
+  function turnCover(delta) {
+    const stack = stackOf((record && record.edition) || {});
+    if (stack.length < 2) return;
+    coverAt = (coverAt + delta + stack.length) % stack.length;
+    stackOpen = false;
+    paint();
+    const sheet = $("sheet");
+    if (sheet) sheet.scrollTop = 0;
+  }
+
+  let swipeX = null;
+  $("sheet").addEventListener("pointerdown", (e) => {
+    if (!e.target.closest(".cover")) { swipeX = null; return; }
+    swipeX = e.clientX;
+  });
+  $("sheet").addEventListener("pointerup", (e) => {
+    if (swipeX == null) return;
+    const dx = e.clientX - swipeX;
+    swipeX = null;
+    if (Math.abs(dx) < 56) return;
+    if (e.target.closest("a, button")) return;
+    turnCover(dx < 0 ? 1 : -1);
+  });
+
   $("sheet").addEventListener("click", (e) => {
+    const turn = e.target.closest("[data-turn]");
+    if (turn) { turnCover(Number(turn.dataset.turn)); return; }
+    const stackBtn = e.target.closest("[data-stack]");
+    if (stackBtn) { stackOpen = !stackOpen; paint(); return; }
     const hear = e.target.closest(".hear");
     if (hear) {
-      const fold = hear.closest(".fold");
-      if (fold) hearFold(fold);
+      const host = hear.closest(".cover") || hear.closest(".fold");
+      if (host) hearFold(host);
       return;
     }
     const btn = e.target.closest(".crease");
     if (!btn) return;
     const id = btn.dataset.fold;
+    if (id && id !== "letter") {
+      const stack = stackOf((record && record.edition) || {});
+      const at = stack.findIndex((it) => it.id === id);
+      if (at >= 0) {
+        coverAt = at;
+        stackOpen = false;
+        paint();
+        const sheet = $("sheet");
+        if (sheet) sheet.scrollTop = 0;
+      }
+      return;
+    }
     const opening = btn.dataset.open !== "1";
     if (opening && id !== "letter") {
       document.querySelectorAll(".crease[data-fold]").forEach((other) => {
