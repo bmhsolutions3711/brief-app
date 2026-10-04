@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#030814" />
+  <meta name="theme-color" content="#efe8dc" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -34,10 +34,11 @@
       <button type="button" class="ver" id="ver" title="Tap to pull an update">v3</button>
       <span class="why" id="why">waking</span>
     </div>
-    <button type="button" class="act" id="pullBtn">Pull</button>
+    <button type="button" class="act" id="pullBtn">Refresh</button>
   </header>
   <div class="tools" id="beats"></div>
   <main class="cab">
+    <section class="sheet" id="sheet" hidden></section>
     <div class="presence" aria-hidden="true">
       <i class="backglow"></i>
       <svg class="visor" viewBox="0 0 200 200">
@@ -57,7 +58,7 @@
         <path class="slit" d="M66 98c12-8 56-8 68 2l-6 12c-16 6-40 6-56 0z" />
       </svg>
     </div>
-    <section class="thread">
+    <section class="thread" id="thread">
       <header class="logbar">
         <span class="logpip"></span>
         <span id="logName">Record</span>
@@ -74,7 +75,8 @@
     </section>
   </main>
   <footer class="armrest">
-    <button type="button" class="act primary read" id="playBtn">Play brief</button>
+    <span class="colophon">A print, not a verdict</span>
+    <button type="button" class="act primary read" id="playBtn">Listen</button>
   </footer>
   <p class="err toast" id="err" hidden></p>
   <script src="app.js"></script>

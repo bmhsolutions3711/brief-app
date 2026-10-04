@@ -23,7 +23,11 @@
   const apiUrl = (p) => (origin ? origin : "") + (p.startsWith("/") ? p : "/" + p);
 
   let record = null;
-  let beat = "ai";
+  let beat = (location.hash || "").replace(/^#/, "") || "sheet";
+  let foldId = "";
+  let letterOpen = false;
+  let onPress = false;
+  let lineOn = -1;
   let poll = null;
   let seq = 0;
   let mode = "";
@@ -89,13 +93,123 @@
     return esc((b ? grouped + "." + b : grouped) + (pct ? "%" : ""));
   }
 
+  function track(raw) {
+    let series = raw;
+    if (typeof series === "string") {
+      try { series = JSON.parse(series); } catch (_) { series = []; }
+    }
+    const nums = (Array.isArray(series) ? series : []).map(Number).filter((n) => Number.isFinite(n) && n > 0);
+    if (nums.length < 2) return "";
+    const first = nums[0];
+    const last = nums[nums.length - 1];
+    const pct = ((last - first) / first) * 100;
+    const tone = pct > 0 ? "up" : pct < 0 ? "down" : "flat";
+    const min = Math.min(...nums);
+    const max = Math.max(...nums);
+    const span = max - min || Math.abs(last) || 1;
+    const w = 100;
+    const h = 24;
+    const pad = 1.6;
+    const d = nums.map((n, i) => {
+      const x = (i / (nums.length - 1)) * w;
+      const y = pad + (1 - (n - min) / span) * (h - pad * 2);
+      return (i ? "L" : "M") + x.toFixed(2) + " " + y.toFixed(2);
+    }).join(" ");
+    const label = (pct > 0 ? "+" : "") + pct.toFixed(1) + "% · 30d";
+    return `<svg class="spark" data-tone="${tone}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><path d="${d}"/></svg><span class="delta" data-tone="${tone}">${label}</span>`;
+  }
+
+  function splitClaim(raw) {
+    const quote = raw.match(/^(["“'‘])(.+?)(["”'’])\s*:\s+(.+)$/);
+    if (quote && quote[2].trim().length >= 12 && quote[4].trim().length >= 8) {
+      return { hit: quote[1] + quote[2] + quote[3], deck: quote[4].trim() };
+    }
+    const seps = [" — ", " – ", " - ", ": "];
+    for (const sep of seps) {
+      const at = raw.indexOf(sep);
+      if (at < 0) continue;
+      const left = raw.slice(0, at).trim();
+      const right = raw.slice(at + sep.length).trim();
+      if (left.length < 3 || right.length < 12) continue;
+      const words = left.split(/\s+/).length;
+      const label = sep === ": "
+        ? words <= 5 && left.length <= 36
+        : words <= 2 && left.length <= 18;
+      if (label && !/[.!?]$/.test(left)) return { quiet: left, hit: right };
+      if (left.length >= 12) return { hit: left, deck: right };
+    }
+    const re = /[.!?](?=\s+\S)/g;
+    let found;
+    while ((found = re.exec(raw))) {
+      const end = found.index;
+      if (end < 22 || end > 120) continue;
+      const left = raw.slice(0, end + 1).trim();
+      const right = raw.slice(end + 1).trim();
+      if (right.length < 16) continue;
+      if (/\b(?:Mr|Mrs|Ms|Dr|Jr|Sr|St|Inc|Ltd|Co|No|Fig|vs|Gen|Sen|Rep)\.$/.test(left)) continue;
+      if (/(?:^|[\s.])[A-Z]\.$/.test(left)) continue;
+      return { hit: left, deck: right };
+    }
+    return null;
+  }
+
+  function mark(title) {
+    const raw = String(title || "").trim();
+    const cut = raw ? splitClaim(raw) : null;
+    if (!cut) return `<span class="hit">${esc(raw)}</span>`;
+    const lead = cut.quiet ? `<span class="quiet">${esc(cut.quiet)}</span>` : "";
+    const tail = cut.deck ? `<span class="deck">${esc(cut.deck)}</span>` : "";
+    return `${lead}<span class="hit">${esc(cut.hit)}</span>${tail}`;
+  }
+
+  function sentenceFor(it, bits) {
+    const stop = new Set("the a an of to and or for in on with that this from by as at is are was be it its your you need what who how after before new one may not into their than then over out about just more most some any our his her they them have has had will can could via per off but nor yet here why when where while also among this that with from".split(" "));
+    const keys = [...new Set((String(it.title || "").toLowerCase().match(/[a-z0-9]{4,}/g) || []).filter((w) => !stop.has(w)))];
+    const score = (text) => {
+      const hay = text.toLowerCase();
+      let n = 0;
+      for (const w of keys) if (hay.includes(w)) n += 1;
+      return n;
+    };
+    let best = "";
+    let bestN = 1;
+    for (const s of bits) {
+      const n = score(s);
+      if (n > bestN) { bestN = n; best = s; }
+    }
+    if (!best) return "";
+    const parts = best.split(/,\s+and\s+|;\s+/).map((s) => s.trim()).filter(Boolean);
+    let pick = best;
+    if (parts.length > 1) {
+      for (const part of parts) {
+        if (score(part) >= bestN) pick = part;
+      }
+    }
+    pick = pick.replace(/^(Additionally|Also|Meanwhile|Separately),\s+/i, "");
+    if (/^[a-z]/.test(pick)) pick = pick[0].toUpperCase() + pick.slice(1);
+    if (!/[.!?]$/.test(pick)) pick += ".";
+    return pick;
+  }
+
   function sentences(text) {
-    return String(text || "").split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter((s) => s.length > 1);
+    const parts = String(text || "").split(/(?<=[.!?])\s+/);
+    const out = [];
+    for (const raw of parts) {
+      const s = raw.trim();
+      if (s.length < 2) continue;
+      const prev = out[out.length - 1] || "";
+      const abbrev = /(?:^|[\s.])[A-Z]\.$/.test(prev) || /\b(?:Mr|Mrs|Ms|Dr|Jr|Sr|St|Inc|Ltd|Gen|Sen|Rep)\.$/.test(prev);
+      if (out.length && (/^[a-z0-9]/.test(s) || abbrev)) out[out.length - 1] += " " + s;
+      else out.push(s);
+    }
+    return out;
   }
 
   function stopAll() {
     seq += 1;
     mode = "";
+    lineOn = -1;
+    delete document.body.dataset.hear;
     setState(record && record.pulling ? "pulling" : "ready");
     paint();
   }
@@ -114,12 +228,88 @@
     return res;
   }
 
+  function foldLetter(rest, open) {
+    if (!rest.length) return "";
+    const on = open ? "1" : "0";
+    const lines = rest.map((s, i) => `<p class="line" data-on="${lineOn === i + 1 ? "1" : "0"}">${esc(s)}</p>`).join("");
+    return `<div class="fold" data-open="${on}"><button type="button" class="crease" data-fold="letter" data-open="${on}" aria-expanded="${open ? "true" : "false"}"><span class="kicker">Letter</span><span class="mark"><span class="hit">The rest of the letter</span></span><i class="pipette" aria-hidden="true"></i></button><div class="well" data-open="${on}"${open ? "" : " inert"}><div>${lines}</div></div></div>`;
+  }
+
+  function foldRow(it, bits) {
+    const id = it.id || "";
+    const open = foldId === id;
+    const on = open ? "1" : "0";
+    const link = safeUrl(it.url);
+    const said = sentenceFor(it, bits);
+    const img = safeUrl(it.image);
+    const plate = img ? `<img src="${esc(img)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">` : "";
+    const rec = link ? `<a href="${esc(link)}" target="_blank" rel="noopener">The record</a>` : "";
+    return `<div class="fold" data-open="${on}"><button type="button" class="crease" data-fold="${esc(id)}" data-open="${on}" aria-expanded="${open ? "true" : "false"}"><span class="kicker">${esc(it.kicker || it.section || "")}</span><span class="mark">${mark(it.title)}</span><i class="pipette" aria-hidden="true"></i></button><div class="well" data-open="${on}"${open ? "" : " inert"}><div>${plate}<p class="by">${esc(it.source || "")}${it.kind ? " · " + esc(it.kind) : ""}${it.published ? " · " + esc(it.published) : ""}</p>${said ? `<p class="said">${esc(said)}</p>` : ""}<p class="doors">${rec}<button type="button" class="hear">Hear this</button></p></div></div></div>`;
+  }
+
+  function paintSheet(ed, pressing) {
+    const lead = ed.lead;
+    const href = lead ? safeUrl(lead.url) : "";
+    const title = lead
+      ? (href ? `<a href="${esc(href)}" target="_blank" rel="noopener">${mark(lead.title)}</a>` : mark(lead.title))
+      : "Nothing on the record yet.";
+    const plate = lead && safeUrl(lead.image)
+      ? `<figure class="plate"><div class="frame"><img src="${esc(safeUrl(lead.image))}" alt="" referrerpolicy="no-referrer" onerror="this.closest('figure').dataset.dead='1'"></div><figcaption>${esc(lead.source || "")}</figcaption></figure>`
+      : "";
+    const by = lead ? `<span class="by">${esc(lead.source || "")}${lead.published ? " · " + esc(lead.published) : ""}</span>` : "";
+    const prints = (ed.prints || []).map((f) =>
+      `<div class="print"><span class="k">${esc(f.label)}</span><b>${showNum(f.value)}</b>${track(f.series)}</div>`
+    ).join("");
+    const bits = sentences(ed.prose || "");
+    const shown = letterOpen || lineOn > 0;
+    const letterBody = bits.length
+      ? `<p class="line" data-on="${lineOn === 0 ? "1" : "0"}">${esc(bits[0])}</p>${foldLetter(bits.slice(1), shown)}`
+      : `<p>${pressing ? "The letter is being set. The sections stay open while the press runs." : "The letter is not set."}</p>`;
+    const folds = [...(ed.stories || []), ...(ed.also || [])].map((it) => foldRow(it, bits)).join("");
+    const banner = pressing
+      ? `<p class="press">${esc(ed.label_now || ed.label || "This edition")} is on the press.<i></i></p>`
+      : (!ed.current && ed.prose ? `<p class="press hold">Holding the last sheet until this edition is set.</p>` : "");
+    const section = (lead && (lead.kicker || lead.section)) || "The record";
+    const lower = folds ? `<div class="folds"><h2 class="colhead">On the sheet</h2>${folds}</div>` : "";
+    $("sheet").innerHTML = `
+      ${banner}
+      <div class="folio"><p class="dateline">${esc(ed.when_now || ed.when || "")}</p></div>
+      <div class="hed"><span class="kicker">${esc(section)}</span><h1>${title}</h1>${by}</div>
+      ${prints ? `<div class="prints">${prints}</div>` : ""}
+      <div class="spread${plate ? "" : " spread-solo"}">${plate}<div class="letter">${letterBody}</div></div>
+      ${lower}
+    `;
+  }
+
   function paint() {
     if (!record) return;
     const beats = record.beats || [];
-    $("beats").innerHTML = beats.map((b) =>
-      `<button type="button" class="act" data-beat="${esc(b.id)}" data-on="${b.id === beat ? "1" : "0"}"><i class="k">${esc(b.kicker)}</i><b>${esc(b.name)}</b></button>`
-    ).join("");
+    const edition = record.edition || {};
+    document.body.dataset.part = edition.part_now || edition.part || "afternoon";
+    document.body.dataset.sheet = beat === "sheet" ? "1" : "0";
+    const swatch = getComputedStyle(document.body).getPropertyValue("--paper").trim();
+    const theme = document.querySelector('meta[name="theme-color"]');
+    if (theme && swatch) theme.setAttribute("content", swatch);
+    $("beats").innerHTML =
+      `<button type="button" class="act" data-beat="sheet" data-on="${beat === "sheet" ? "1" : "0"}"><i class="k">The sheet</i><b>Front</b></button>` +
+      beats.map((b) =>
+        `<button type="button" class="act" data-beat="${esc(b.id)}" data-on="${b.id === beat ? "1" : "0"}"><i class="k">${esc(b.kicker)}</i><b>${esc(b.name)}</b></button>`
+      ).join("");
+    const pressing = onPress || !!record.pulling;
+    const partName = String(edition.label_now || edition.label || "Edition").replace(/ edition$/i, "");
+    $("why").textContent = pressing ? "On the press" : partName;
+    if (beat === "sheet") {
+      $("sheet").hidden = false;
+      $("thread").hidden = true;
+      paintSheet(edition, pressing);
+      const canHear = !!(edition.prose);
+      $("playBtn").textContent = mode ? "Stop" : (canHear ? "Listen" : "Setting");
+      $("playBtn").disabled = mode !== "edition" && !canHear;
+      return;
+    }
+    $("sheet").hidden = true;
+    $("thread").hidden = false;
+    $("playBtn").disabled = false;
     const meta = beats.find((b) => b.id === beat) || beats[0];
     if (!meta) return;
     beat = meta.id;
@@ -129,7 +319,7 @@
     const figEl = $("figures");
     figEl.hidden = figs.length === 0;
     figEl.innerHTML = figs.map((f) =>
-      `<div class="figure"><span class="k">${esc(f.label)}</span><b>${showNum(f.value)}</b><span class="as">${esc(f.as_of)} · ${esc(f.source_name)}</span></div>`
+      `<div class="figure"><span class="k">${esc(f.label)}</span><b>${showNum(f.value)}</b>${track(f.series)}<span class="as">${esc(f.as_of)} · ${esc(f.source_name)}</span></div>`
     ).join("");
     const body = (record.readings || {})[beat] || "";
     $("reading").hidden = !body;
@@ -140,7 +330,7 @@
       const when = it.published || "date unknown";
       const on = mode === it.id ? "1" : "0";
       const link = href ? `<a href="${esc(href)}" target="_blank" rel="noopener">${esc(it.source)}</a>` : esc(it.source);
-      return `<li><button type="button" class="spin" data-id="${esc(it.id)}" data-on="${on}">${on === "1" ? "Stop" : "Play"}</button><div class="body"><span class="who">${esc(it.source)} · ${esc(it.kind)} · ${esc(when)}</span>${esc(it.title)}<div>${link}</div></div></li>`;
+      return `<li><button type="button" class="spin" data-id="${esc(it.id)}" data-on="${on}">${on === "1" ? "Stop" : "Play"}</button><div class="body"><span class="who">${esc(it.source)} · ${esc(it.kind)} · ${esc(when)}</span><span class="mark">${mark(it.title)}</span><div>${link}</div></div></li>`;
     }).join("") || `<li><div class="body"><span class="who">Record</span>Nothing pulled on this beat yet.</div></li>`;
     const bad = (record.sources || []).filter((s) => s.beat === beat && !s.ok && s.pulled_at);
     $("miss").textContent = bad.length ? bad.map((s) => `${s.name} did not answer`).join(" · ") : "";
@@ -156,8 +346,8 @@
       showErr("");
       if (!mode) setState(record.pulling ? "pulling" : "ready");
       paint();
-      if (record.pulling && !poll) poll = setInterval(load, 2000);
-      if (!record.pulling && poll) { clearInterval(poll); poll = null; }
+      if ((record.pulling || onPress) && !poll) poll = setInterval(load, 2000);
+      if (!record.pulling && !onPress && poll) { clearInterval(poll); poll = null; }
     } catch (e) {
       if (e.message === "unauthorized") return;
       setState("dark");
@@ -234,6 +424,36 @@
     return text;
   }
 
+  async function playEdition() {
+    if (mode) { stopAll(); return; }
+    const prose = record && record.edition && record.edition.prose;
+    if (!prose) return;
+    stopAll();
+    mode = "edition";
+    lineOn = -1;
+    letterOpen = true;
+    document.body.dataset.hear = "1";
+    const gen = seq;
+    setState("playing");
+    paint();
+    try {
+      const bits = sentences(prose);
+      const lines = bits.length ? bits : [prose];
+      for (let i = 0; i < lines.length; i++) {
+        if (gen !== seq) return;
+        lineOn = i;
+        const nodes = document.querySelectorAll(".letter p");
+        nodes.forEach((p, n) => { p.dataset.on = n === i ? "1" : "0"; });
+        if (nodes[i]) nodes[i].scrollIntoView({ block: "nearest" });
+        await speakOne(lines[i], gen);
+      }
+    } catch (e) {
+      if (gen === seq) showErr(e.message || "could not read the edition");
+    } finally {
+      if (gen === seq) { lineOn = -1; stopAll(); }
+    }
+  }
+
   async function playBrief() {
     if (mode === "brief") { stopAll(); return; }
     stopAll();
@@ -276,10 +496,72 @@
     }
   }
 
+  function setFold(id, open) {
+    if (id === "letter") letterOpen = open;
+    else foldId = open ? id : "";
+    const btn = document.querySelector(`.crease[data-fold="${CSS.escape(id)}"]`);
+    const fold = btn && btn.closest(".fold");
+    if (!fold) return;
+    const on = open ? "1" : "0";
+    fold.dataset.open = on;
+    btn.dataset.open = on;
+    btn.setAttribute("aria-expanded", open ? "true" : "false");
+    const well = fold.querySelector(".well");
+    if (well) {
+      well.dataset.open = on;
+      well.inert = !open;
+    }
+    if (open && id !== "letter") fold.scrollIntoView({ block: "nearest" });
+  }
+
+  async function hearFold(fold) {
+    const said = fold.querySelector(".said");
+    const hit = fold.querySelector(".hit");
+    const text = [hit && hit.textContent, said && said.textContent].filter(Boolean).join(". ");
+    if (!text) return;
+    stopAll();
+    mode = "fold";
+    document.body.dataset.hear = "1";
+    const gen = seq;
+    setState("playing");
+    paint();
+    try {
+      await speakAll([text], gen);
+    } catch (e) {
+      if (gen === seq) showErr(e.message || "could not play");
+    } finally {
+      if (gen === seq) stopAll();
+    }
+  }
+
+  $("sheet").addEventListener("click", (e) => {
+    const hear = e.target.closest(".hear");
+    if (hear) {
+      const fold = hear.closest(".fold");
+      if (fold) hearFold(fold);
+      return;
+    }
+    const btn = e.target.closest(".crease");
+    if (!btn) return;
+    const id = btn.dataset.fold;
+    const opening = btn.dataset.open !== "1";
+    if (opening && id !== "letter") {
+      document.querySelectorAll(".crease[data-fold]").forEach((other) => {
+        if (other.dataset.fold !== "letter" && other.dataset.fold !== id && other.dataset.open === "1") {
+          setFold(other.dataset.fold, false);
+        }
+      });
+    }
+    setFold(id, opening);
+  });
+
   $("beats").addEventListener("click", (e) => {
     const btn = e.target.closest("button[data-beat]");
     if (!btn) return;
     beat = btn.dataset.beat;
+    if (!beatsOk(beat)) beat = "sheet";
+    history.replaceState(null, "", beat === "sheet" ? location.pathname + location.search : "#" + beat);
+    lineOn = -1;
     paint();
   });
 
@@ -289,23 +571,43 @@
     playItem(btn.dataset.id);
   });
 
-  $("pullBtn").addEventListener("click", async () => {
+  function beatsOk(id) {
+    if (id === "sheet") return true;
+    return !!((record && record.beats) || []).some((b) => b.id === id);
+  }
+
+  async function press() {
+    if (onPress) return;
+    onPress = true;
     stopAll();
     setState("pulling");
     showErr("");
+    paint();
     try {
       const res = await api("/api/pull", { method: "POST", body: "{}" });
-      if (!res.ok) throw new Error("pull failed");
-      await load();
-    } catch (e) {
-      if (e.message !== "unauthorized") {
-        showErr(e.message || "pull failed");
-        setState("ready");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "pull failed");
+      if (data.pulling) {
+        while (onPress) {
+          await new Promise((r) => setTimeout(r, 1500));
+          await load();
+          if (record && !record.pulling) break;
+        }
       }
+    } catch (e) {
+      if (e.message !== "unauthorized") showErr(e.message || "pull failed");
+    } finally {
+      onPress = false;
+      await load();
     }
-  });
+  }
 
-  $("playBtn").addEventListener("click", () => { playBrief(); });
+  $("pullBtn").addEventListener("click", () => { press(); });
+
+  $("playBtn").addEventListener("click", () => {
+    if (beat === "sheet") playEdition();
+    else playBrief();
+  });
 
   $("connectForm").addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -340,9 +642,10 @@
       if (!h.ok) throw new Error("dark");
       if (onPages && !h.authed && !token) { showConnect(""); return; }
       await load();
+      press();
     } catch (_) {
       if (token || !onPages) {
-        try { await load(); return; } catch (__) {}
+        try { await load(); press(); return; } catch (__) {}
       }
       setState("dark");
     }
