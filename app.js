@@ -44,6 +44,13 @@
 
   function setState(s) {
     document.body.dataset.state = s;
+    if (document.body.dataset.sitting === "1") {
+      $("why").textContent = "The sitting";
+      $("pip").dataset.on = "1";
+      const sit = $("sitBtn");
+      if (sit) sit.textContent = "Stop";
+      return;
+    }
     const map = {
       boot: ["waking", "0"],
       pulling: ["pulling", "1"],
@@ -213,6 +220,7 @@
     mode = "";
     lineOn = -1;
     delete document.body.dataset.hear;
+    if (window.BriefSitting) window.BriefSitting.halt(true);
     setState(record && record.pulling ? "pulling" : "ready");
     paint();
   }
@@ -350,12 +358,25 @@
       beats.map((b) =>
         `<button type="button" class="act" data-beat="${esc(b.id)}" data-on="${b.id === beat ? "1" : "0"}"><i class="k">${esc(b.kicker)}</i><b>${esc(b.name)}</b></button>`
       ).join("");
+    if (document.body.dataset.sitting === "1") {
+      $("sheet").hidden = true;
+      $("thread").hidden = true;
+      const sit = $("sitting");
+      if (sit) sit.hidden = false;
+      $("why").textContent = "The sitting";
+      const sitBtn = $("sitBtn");
+      if (sitBtn) sitBtn.textContent = "Stop";
+      $("playBtn").textContent = "Listen";
+      return;
+    }
     const pressing = onPress || !!record.pulling;
     const partName = String(edition.label_now || edition.label || "Edition").replace(/ edition$/i, "");
     $("why").textContent = pressing ? "On the press" : partName;
     if (beat === "sheet") {
       $("sheet").hidden = false;
       $("thread").hidden = true;
+      const sit = $("sitting");
+      if (sit) sit.hidden = true;
       paintSheet(edition, pressing);
       const canHear = !!(edition.prose);
       $("playBtn").textContent = mode ? "Stop" : (canHear ? "Listen" : "Setting");
@@ -364,6 +385,8 @@
     }
     $("sheet").hidden = true;
     $("thread").hidden = false;
+    const sitIdle = $("sitting");
+    if (sitIdle) sitIdle.hidden = true;
     $("playBtn").disabled = false;
     const meta = beats.find((b) => b.id === beat) || beats[0];
     if (!meta) return;
@@ -653,6 +676,7 @@
   $("beats").addEventListener("click", (e) => {
     const btn = e.target.closest("button[data-beat]");
     if (!btn) return;
+    if (window.BriefSitting) window.BriefSitting.halt(true);
     beat = btn.dataset.beat;
     if (!beatsOk(beat)) beat = "sheet";
     history.replaceState(null, "", beat === "sheet" ? location.pathname + location.search : "#" + beat);
@@ -696,6 +720,8 @@
       await load();
     }
   }
+
+  window.BriefStop = stopAll;
 
   $("pullBtn").addEventListener("click", () => { press(); });
 

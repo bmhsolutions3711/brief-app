@@ -31,7 +31,7 @@
     <div class="who">
       <span class="pip" id="pip" data-on="0"></span>
       <span class="name">Brief</span>
-      <button type="button" class="ver" id="ver" title="Tap to pull an update">v4</button>
+      <button type="button" class="ver" id="ver" title="Tap to pull an update">v5</button>
       <span class="why" id="why">waking</span>
     </div>
     <button type="button" class="act" id="pullBtn">Refresh</button>
@@ -39,6 +39,7 @@
   <div class="tools" id="beats"></div>
   <main class="cab">
     <section class="sheet" id="sheet" hidden></section>
+    <section class="sitting" id="sitting" hidden></section>
     <div class="presence" aria-hidden="true">
       <i class="backglow"></i>
       <svg class="visor" viewBox="0 0 200 200">
@@ -76,9 +77,11 @@
   </main>
   <footer class="armrest">
     <span class="colophon">A print, not a verdict</span>
+    <button type="button" class="act sit" id="sitBtn"><i class="k">The record</i><b>The sitting</b></button>
     <button type="button" class="act primary read" id="playBtn">Listen</button>
   </footer>
   <p class="err toast" id="err" hidden></p>
   <script src="app.js"></script>
+  <script src="sitting.js"></script>
 </body>
 </html>
