@@ -1,4 +1,4 @@
-const VERSION = "brief-shell-v7";
+const VERSION = "brief-shell-v8";
 
 self.addEventListener("install", (e) => {
   e.waitUntil(self.skipWaiting());
@@ -8,8 +8,7 @@ self.addEventListener("activate", (e) => {
   e.waitUntil(self.clients.claim());
 });
 
-self.addEventListener("fetch", (e) => {
-  const url = new URL(e.request.url);
-  if (url.pathname.startsWith("/api/")) return;
-  e.respondWith(fetch(e.request));
-});
+// A fetch handler is required for Android to install the app.
+// Do not call respondWith. Catching the document request is what
+// made the installed app fail to open.
+self.addEventListener("fetch", () => {});
