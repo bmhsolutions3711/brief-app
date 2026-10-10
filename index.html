@@ -14,7 +14,7 @@
   <link rel="apple-touch-icon" href="icon-180.png" />
   <link rel="stylesheet" href="styles.css" />
 </head>
-<body data-state="boot">
+<body data-state="boot" data-open="palm">
   <div class="grain" aria-hidden="true"></div>
   <section class="connect" id="connect" hidden>
     <p class="kicker">The record</p>
@@ -30,16 +30,16 @@
   <header class="rail">
     <div class="who">
       <span class="pip" id="pip" data-on="0"></span>
-      <span class="name">Brief</span>
-      <button type="button" class="ver" id="ver" title="Tap to pull an update">v5</button>
+      <button type="button" class="name" id="homeBtn">Brief</button>
+      <button type="button" class="ver" id="ver" title="Tap to pull an update">v6</button>
       <span class="why" id="why">waking</span>
+      <button type="button" class="act" id="pullBtn">Refresh</button>
     </div>
-    <button type="button" class="act" id="pullBtn">Refresh</button>
   </header>
   <div class="tools" id="beats"></div>
   <main class="cab">
+    <section class="palm" id="palm"></section>
     <section class="sheet" id="sheet" hidden></section>
-    <section class="sitting" id="sitting" hidden></section>
     <div class="presence" aria-hidden="true">
       <i class="backglow"></i>
       <svg class="visor" viewBox="0 0 200 200">
@@ -59,7 +59,7 @@
         <path class="slit" d="M66 98c12-8 56-8 68 2l-6 12c-16 6-40 6-56 0z" />
       </svg>
     </div>
-    <section class="thread" id="thread">
+    <section class="thread" id="thread" hidden>
       <header class="logbar">
         <span class="logpip"></span>
         <span id="logName">Record</span>
@@ -67,21 +67,24 @@
       </header>
       <p class="gap" id="gap"></p>
       <div class="figures" id="figures"></div>
+      <div class="story-plate" id="storyPlate" hidden></div>
       <div class="reading" id="reading" hidden>
         <span class="who">Reading · model · not the source</span>
         <p id="readingBody"></p>
       </div>
       <ol class="ribbon" id="ribbon"></ol>
+      <p class="endline" id="endline" hidden></p>
+      <aside class="holding" id="holding"></aside>
       <p class="miss" id="miss"></p>
     </section>
   </main>
   <footer class="armrest">
     <span class="colophon">A print, not a verdict</span>
-    <button type="button" class="act sit" id="sitBtn"><i class="k">The record</i><b>The sitting</b></button>
+    <button type="button" class="sheetdoor" id="sheetBtn">The sheet</button>
     <button type="button" class="act primary read" id="playBtn">Listen</button>
   </footer>
   <p class="err toast" id="err" hidden></p>
   <script src="app.js"></script>
-  <script src="sitting.js"></script>
+  <script src="palm.js"></script>
 </body>
 </html>

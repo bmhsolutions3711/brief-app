@@ -23,12 +23,27 @@
   const apiUrl = (p) => (origin ? origin : "") + (p.startsWith("/") ? p : "/" + p);
 
   let record = null;
-  let beat = (location.hash || "").replace(/^#/, "") || "sheet";
+  let beat = (location.hash || "").replace(/^#/, "") || "palm";
   let foldId = "";
   let letterOpen = false;
   let coverAt = 0;
   let coverEdition = "";
   let stackOpen = false;
+  const GLANCE_KEY = "brief_glance";
+  const HOLD_KEY = "brief_hold";
+
+  function loadGlance() {
+    try { return new Set(JSON.parse(sessionStorage.getItem(GLANCE_KEY) || "[]")); }
+    catch (_) { return new Set(); }
+  }
+  function loadHold() {
+    try {
+      const rows = JSON.parse(localStorage.getItem(HOLD_KEY) || "[]");
+      return Array.isArray(rows) ? rows.slice(-3) : [];
+    } catch (_) { return []; }
+  }
+  let glanced = loadGlance();
+  let holding = loadHold();
   let onPress = false;
   let lineOn = -1;
   let poll = null;
@@ -103,7 +118,7 @@
     return esc((b ? grouped + "." + b : grouped) + (pct ? "%" : ""));
   }
 
-  function track(raw) {
+  function track(raw, bare) {
     let series = raw;
     if (typeof series === "string") {
       try { series = JSON.parse(series); } catch (_) { series = []; }
@@ -126,7 +141,9 @@
       return (i ? "L" : "M") + x.toFixed(2) + " " + y.toFixed(2);
     }).join(" ");
     const label = (pct > 0 ? "+" : "") + pct.toFixed(1) + "% · 30d";
-    return `<svg class="spark" data-tone="${tone}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><path d="${d}"/></svg><span class="delta" data-tone="${tone}">${label}</span>`;
+    const svg = `<svg class="spark" data-tone="${tone}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><path d="${d}"/></svg>`;
+    if (bare) return svg;
+    return `${svg}<span class="delta" data-tone="${tone}">${label}</span>`;
   }
 
   function splitClaim(raw) {
@@ -221,6 +238,7 @@
     lineOn = -1;
     delete document.body.dataset.hear;
     if (window.BriefSitting) window.BriefSitting.halt(true);
+    if (window.BriefPalm) window.BriefPalm.stop();
     setState(record && record.pulling ? "pulling" : "ready");
     paint();
   }
@@ -284,6 +302,97 @@
     return `<div class="fold" data-open="${on}"><button type="button" class="crease" data-fold="${esc(id)}" data-open="${on}" aria-expanded="${open ? "true" : "false"}"><span class="kicker">${esc(it.kicker || it.section || "")}</span><span class="mark">${mark(it.title)}</span><i class="pipette" aria-hidden="true"></i></button><div class="well" data-open="${on}"${open ? "" : " inert"}><div>${plate}<p class="by">${esc(it.source || "")}${it.kind ? " · " + esc(it.kind) : ""}${it.published ? " · " + esc(it.published) : ""}</p>${said ? `<p class="said">${esc(said)}</p>` : ""}<p class="doors">${rec}<button type="button" class="hear">Hear this</button></p></div></div></div>`;
   }
 
+  function shortTitle(title) {
+    const cut = splitClaim(String(title || ""));
+    const hit = (cut && cut.hit) || String(title || "");
+    const words = hit.split(/\s+/).filter((w) => !/^(the|a|an)$/i.test(w));
+    return (words.length ? words : hit.split(/\s+/)).slice(0, 4).join(" ");
+  }
+
+  function saveGlance() {
+    sessionStorage.setItem(GLANCE_KEY, JSON.stringify([...glanced]));
+  }
+
+  function itemKicker(it) {
+    if (!it) return "";
+    if (it.kicker) return it.kicker;
+    if (it.section) return it.section;
+    const sheet = stackOf((record && record.edition) || {}).find((row) => row.id === it.id);
+    if (sheet && (sheet.kicker || sheet.section)) return sheet.kicker || sheet.section;
+    const beat = ((record && record.beats) || []).find((b) => b.id === it.beat);
+    return (beat && beat.kicker) || "";
+  }
+
+  function pinItem(it) {
+    if (!it || !it.id) return;
+    if (holding.some((h) => h.id === it.id)) return;
+    const sheet = stackOf((record && record.edition) || {}).find((row) => row.id === it.id);
+    const row = {
+      id: it.id,
+      title: it.title || (sheet && sheet.title) || "",
+      kicker: itemKicker(it),
+      image: safeUrl(it.image) || safeUrl(sheet && sheet.image) || "",
+      url: safeUrl(it.url) || safeUrl(sheet && sheet.url) || "",
+    };
+    holding = holding.filter((h) => h.id !== row.id);
+    holding.push(row);
+    holding = holding.slice(-3);
+    localStorage.setItem(HOLD_KEY, JSON.stringify(holding));
+    paint();
+  }
+
+  function findItem(id) {
+    const items = (record && record.items) || [];
+    const hit = items.find((it) => it.id === id);
+    if (hit) return hit;
+    return stackOf((record && record.edition) || {}).find((it) => it.id === id) || null;
+  }
+
+  function holdingHtml() {
+    const rows = holding.map((h) => {
+      const img = h.image ? `<img src="${esc(h.image)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">` : `<i class="hold-blank" aria-hidden="true"></i>`;
+      const href = safeUrl(h.url);
+      const title = shortTitle(h.title);
+      const body = href
+        ? `<a href="${esc(href)}" target="_blank" rel="noopener">${esc(title)}</a>`
+        : esc(title);
+      return `<li>${img}<div><span class="kicker">${esc(h.kicker || "Sheet")}</span><b>${body}</b></div></li>`;
+    }).join("");
+    return `<p class="holding-h"><span class="kicker">Holding</span><b>${holding.length}/3</b></p>${rows ? `<ul>${rows}</ul>` : ""}`;
+  }
+
+  function glanceRow(stack) {
+    const picks = stack.slice(1).filter((it) => safeUrl(it.image)).slice(0, 3);
+    if (!picks.length) return "";
+    const buttons = picks.map((it) => {
+      const on = glanced.has(it.id) ? "1" : "0";
+      const img = `<img src="${esc(safeUrl(it.image))}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">`;
+      return `<button type="button" class="look" data-glance="${esc(it.id)}" data-on="${on}"><span class="kicker">${esc(it.kicker || it.section || "")}</span>${img}</button>`;
+    }).join("");
+    const done = picks.every((it) => glanced.has(it.id));
+    const hint = done ? "Done. The rest is optional." : "Glance the three.";
+    return `<div class="looks">${buttons}</div><p class="hint" data-done="${done ? "1" : "0"}">${hint}</p>`;
+  }
+
+  function doorGrid() {
+    const beats = (record && record.beats) || [];
+    if (!beats.length) return "";
+    const doors = beats.map((b) => {
+      const figs = ((record && record.figures) || []).filter((f) => f.beat === b.id);
+      let face = "";
+      if (figs.length) {
+        face = track(figs[0].series, true) || `<i class="door-blank" aria-hidden="true"></i>`;
+      } else {
+        const pictured = ((record && record.items) || []).find((it) => it.beat === b.id && safeUrl(it.image));
+        face = pictured
+          ? `<img src="${esc(safeUrl(pictured.image))}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">`
+          : `<i class="door-blank" aria-hidden="true"></i>`;
+      }
+      return `<button type="button" class="door" data-door="${esc(b.id)}">${face}<b>${esc(b.name)}</b></button>`;
+    }).join("");
+    return `<div class="doorgrid">${doors}</div>`;
+  }
+
   function paintSheet(ed, pressing) {
     const stack = stackOf(ed);
     const eid = String(ed.id || "");
@@ -318,29 +427,27 @@
       letterBody = `${said ? `<p class="said">${esc(said)}</p>` : ""}${foldLetter(bits, shown, "The letter", 0)}`;
     }
     const rec = href ? `<a href="${esc(href)}" target="_blank" rel="noopener">The record</a>` : "";
-    const others = stack.filter((_, i) => i !== coverAt);
-    const folds = stackOpen ? others.map((it) => foldRow(it, bits)).join("") : "";
-    const stackBtn = others.length
-      ? `<button type="button" class="stackbtn" data-stack="1">${stackOpen ? "Close the stack" : "The other " + others.length}</button>`
+    const hold = story && story.id
+      ? `<button type="button" class="hold" data-hold="${esc(story.id)}">${holding.some((h) => h.id === story.id) ? "Held" : "Hold"}</button>`
       : "";
     const banner = pressing
       ? `<p class="press">${esc(ed.label_now || ed.label || "This edition")} is on the press.<i></i></p>`
       : (!ed.current && ed.prose ? `<p class="press hold">Holding the last sheet until this edition is set.</p>` : "");
     const section = (story && (story.kicker || story.section)) || "The record";
-    const lower = folds ? `<div class="folds">${folds}</div>` : "";
     $("sheet").innerHTML = `
       ${banner}
       <div class="folio"><p class="dateline">${esc(ed.when_now || ed.when || "")}</p></div>
+      ${glanceRow(stack)}
       <article class="cover">
         ${plate}
         <div class="hed"><span class="kicker">${esc(section)}</span><h1>${title}</h1>${by}</div>
         <div class="letter">${letterBody}</div>
-        <p class="doors">${rec}<button type="button" class="hear">Hear this</button></p>
+        <p class="doors">${rec}<button type="button" class="hear">Hear this</button>${hold}</p>
         ${dial(stack)}
       </article>
       ${prints ? `<div class="prints">${prints}</div>` : ""}
-      ${stackBtn}
-      ${lower}
+      ${doorGrid()}
+      <aside class="holding">${holdingHtml()}</aside>
     `;
   }
 
@@ -350,6 +457,7 @@
     const edition = record.edition || {};
     document.body.dataset.part = edition.part_now || edition.part || "afternoon";
     document.body.dataset.sheet = beat === "sheet" ? "1" : "0";
+    document.body.dataset.open = beat === "palm" ? "palm" : "record";
     const swatch = getComputedStyle(document.body).getPropertyValue("--paper").trim();
     const theme = document.querySelector('meta[name="theme-color"]');
     if (theme && swatch) theme.setAttribute("content", swatch);
@@ -369,6 +477,19 @@
       $("playBtn").textContent = "Listen";
       return;
     }
+    const palm = $("palm");
+    if (beat === "palm") {
+      $("sheet").hidden = true;
+      $("thread").hidden = true;
+      const sit = $("sitting");
+      if (sit) sit.hidden = true;
+      if (palm) palm.hidden = false;
+      const pressing = onPress || !!record.pulling;
+      $("why").textContent = pressing ? "On the press" : "The palm";
+      if (window.BriefPalm) window.BriefPalm.open();
+      return;
+    }
+    if (palm) palm.hidden = true;
     const pressing = onPress || !!record.pulling;
     const partName = String(edition.label_now || edition.label || "Edition").replace(/ edition$/i, "");
     $("why").textContent = pressing ? "On the press" : partName;
@@ -394,22 +515,39 @@
     $("logName").textContent = meta.name;
     $("gap").textContent = meta.gap || "";
     const figs = (record.figures || []).filter((f) => f.beat === beat);
+    const isPrint = figs.length > 0;
     const figEl = $("figures");
     figEl.hidden = figs.length === 0;
+    figEl.dataset.stop = isPrint ? "1" : "0";
     figEl.innerHTML = figs.map((f) =>
       `<div class="figure"><span class="k">${esc(f.label)}</span><b>${showNum(f.value)}</b>${track(f.series)}<span class="as">${esc(f.as_of)} · ${esc(f.source_name)}</span></div>`
     ).join("");
+    const plate = $("storyPlate");
+    const items = (record.items || []).filter((it) => it.beat === beat);
+    const pictured = !isPrint && items.find((it) => safeUrl(it.image));
+    if (pictured) {
+      plate.hidden = false;
+      plate.innerHTML = `<figure class="plate"><div class="frame"><img src="${esc(safeUrl(pictured.image))}" alt="" referrerpolicy="no-referrer" onerror="this.closest('figure').dataset.dead='1'"></div></figure>`;
+    } else {
+      plate.hidden = true;
+      plate.innerHTML = "";
+    }
     const body = (record.readings || {})[beat] || "";
     $("reading").hidden = !body;
     $("readingBody").textContent = body;
-    const items = (record.items || []).filter((it) => it.beat === beat);
-    $("ribbon").innerHTML = items.map((it) => {
+    const shown = items.slice(0, 3);
+    $("ribbon").innerHTML = shown.map((it) => {
       const href = safeUrl(it.url);
       const when = it.published || "date unknown";
       const on = mode === it.id ? "1" : "0";
       const link = href ? `<a href="${esc(href)}" target="_blank" rel="noopener">${esc(it.source)}</a>` : esc(it.source);
-      return `<li><button type="button" class="spin" data-id="${esc(it.id)}" data-on="${on}">${on === "1" ? "Stop" : "Play"}</button><div class="body"><span class="who">${esc(it.source)} · ${esc(it.kind)} · ${esc(when)}</span><span class="mark">${mark(it.title)}</span><div>${link}</div></div></li>`;
+      const held = holding.some((h) => h.id === it.id);
+      return `<li><button type="button" class="spin" data-id="${esc(it.id)}" data-on="${on}">${on === "1" ? "Stop" : "Play"}</button><div class="body"><span class="who">${esc(it.source)} · ${esc(it.kind)} · ${esc(when)}</span><span class="mark">${mark(it.title)}</span><div>${link}</div></div><button type="button" class="hold" data-hold="${esc(it.id)}">${held ? "Held" : "Hold"}</button></li>`;
     }).join("") || `<li><div class="body"><span class="who">Record</span>Nothing pulled on this beat yet.</div></li>`;
+    const end = $("endline");
+    end.hidden = beat !== "crypto";
+    end.textContent = beat === "crypto" ? "End of Crypto. Nothing is loading below this line." : "";
+    $("holding").innerHTML = holdingHtml();
     const bad = (record.sources || []).filter((s) => s.beat === beat && !s.ok && s.pulled_at);
     $("miss").textContent = bad.length ? bad.map((s) => `${s.name} did not answer`).join(" · ") : "";
     $("playBtn").textContent = mode === "brief" ? "Stop" : "Play brief";
@@ -622,6 +760,26 @@
     if (sheet) sheet.scrollTop = 0;
   }
 
+  function openBeat(id) {
+    if (window.BriefSitting) window.BriefSitting.halt(true);
+    if (id !== "palm" && window.BriefPalm) window.BriefPalm.stop();
+    beat = id;
+    if (!beatsOk(beat)) beat = "palm";
+    const bare = beat === "palm" || beat === "sheet";
+    history.replaceState(null, "", bare ? location.pathname + location.search : "#" + beat);
+    lineOn = -1;
+    paint();
+    const scroller = beat === "palm" ? $("palm") : (beat === "sheet" ? $("sheet") : $("thread"));
+    if (scroller) scroller.scrollTop = 0;
+  }
+
+  function markGlance(id) {
+    if (!id || glanced.has(id)) return;
+    glanced.add(id);
+    saveGlance();
+    paint();
+  }
+
   let swipeX = null;
   $("sheet").addEventListener("pointerdown", (e) => {
     if (!e.target.closest(".cover")) { swipeX = null; return; }
@@ -637,6 +795,12 @@
   });
 
   $("sheet").addEventListener("click", (e) => {
+    const glance = e.target.closest("[data-glance]");
+    if (glance) { markGlance(glance.dataset.glance); return; }
+    const door = e.target.closest("[data-door]");
+    if (door) { openBeat(door.dataset.door); return; }
+    const held = e.target.closest("[data-hold]");
+    if (held) { pinItem(findItem(held.dataset.hold)); return; }
     const turn = e.target.closest("[data-turn]");
     if (turn) { turnCover(Number(turn.dataset.turn)); return; }
     const stackBtn = e.target.closest("[data-stack]");
@@ -676,22 +840,23 @@
   $("beats").addEventListener("click", (e) => {
     const btn = e.target.closest("button[data-beat]");
     if (!btn) return;
-    if (window.BriefSitting) window.BriefSitting.halt(true);
-    beat = btn.dataset.beat;
-    if (!beatsOk(beat)) beat = "sheet";
-    history.replaceState(null, "", beat === "sheet" ? location.pathname + location.search : "#" + beat);
-    lineOn = -1;
-    paint();
+    openBeat(btn.dataset.beat);
+  });
+
+  $("thread").addEventListener("click", (e) => {
+    const held = e.target.closest("[data-hold]");
+    if (held) pinItem(findItem(held.dataset.hold));
   });
 
   $("ribbon").addEventListener("click", (e) => {
+    if (e.target.closest("[data-hold]")) return;
     const btn = e.target.closest("button[data-id]");
     if (!btn) return;
     playItem(btn.dataset.id);
   });
 
   function beatsOk(id) {
-    if (id === "sheet") return true;
+    if (id === "palm" || id === "sheet") return true;
     return !!((record && record.beats) || []).some((b) => b.id === id);
   }
 
@@ -721,9 +886,11 @@
     }
   }
 
-  window.BriefStop = stopAll;
-
   $("pullBtn").addEventListener("click", () => { press(); });
+  const homeBtn = $("homeBtn");
+  if (homeBtn) homeBtn.addEventListener("click", () => openBeat("palm"));
+  const sheetBtn = $("sheetBtn");
+  if (sheetBtn) sheetBtn.addEventListener("click", () => openBeat("sheet"));
 
   $("playBtn").addEventListener("click", () => {
     if (beat === "sheet") playEdition();
@@ -750,6 +917,8 @@
       showConnect(err.message || "bad token");
     }
   });
+
+  window.BriefStop = stopAll;
 
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("sw.js").catch(() => {});
