@@ -183,7 +183,7 @@
     let note = "";
     if (!data.heavy && !thin.length) note = `<p class="empty">The desk is clear.</p>`;
     else if (!data.heavy) note = `<p class="quiet">The record is thin today.</p>`;
-    root.innerHTML = `<div class="desk">${note}<div class="thins">${slings}</div>${heavy}${count}<div class="gaps" hidden>${gaps}</div></div>`;
+    root.innerHTML = `<div class="desk">${note}${heavy}<div class="thins">${slings}</div>${count}<div class="gaps" hidden>${gaps}</div></div>`;
     root.dataset.drawn = "1";
     root.querySelectorAll(".sling").forEach(arm);
     root.scrollTop = root.scrollHeight;
