@@ -186,7 +186,7 @@
     root.innerHTML = `<div class="desk">${note}${heavy}<div class="thins">${slings}</div>${count}<div class="gaps" hidden>${gaps}</div></div>`;
     root.dataset.drawn = "1";
     root.querySelectorAll(".sling").forEach(arm);
-    root.scrollTop = root.scrollHeight;
+    root.scrollTop = 0;
   }
 
   async function open() {

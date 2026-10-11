@@ -844,15 +844,15 @@ body[data-open="palm"] #playBtn { display: none; }
 body[data-open="palm"] .sheetdoor { display: inline; }
 .palm {
   flex: 1; min-height: 0; overflow: auto;
-  display: flex; flex-direction: column; justify-content: flex-end;
+  display: flex; flex-direction: column; justify-content: center;
   width: min(100%, 40rem); margin: 0 auto;
   padding: 18px 2px 8px;
 }
 @media (min-width: 800px) {
-  .palm { justify-content: center; padding-bottom: 6vh; }
+  .palm { padding-bottom: 6vh; }
 }
 .palm[hidden] { display: none !important; }
-.desk { display: flex; flex-direction: column; justify-content: flex-end; gap: 0; }
+.desk { display: flex; flex-direction: column; justify-content: center; gap: 0; width: 100%; }
 .empty {
   margin: 0 0 18px;
   font-family: "Inter Tight", Inter, sans-serif; font-style: normal; font-weight: 300;
@@ -882,7 +882,7 @@ body[data-open="palm"] .sheetdoor { display: inline; }
   to { transform: translateX(14%) rotate(6deg); opacity: 0; }
 }
 .weight, .thin { position: relative; background: transparent; box-shadow: none; }
-.weight { z-index: 1; border-top: none; }
+.weight { z-index: 1; border-top: none; text-align: center; container-type: inline-size; }
 .thin {
   color: var(--ink);
   display: grid;
@@ -896,6 +896,7 @@ body[data-open="palm"] .sheetdoor { display: inline; }
   display: block; width: 100%; border: 0; background: none; color: inherit;
   text-align: left; padding: 8px 0 4px; font: inherit; cursor: pointer;
 }
+.weight .face { text-align: center; }
 .palm .kick {
   display: block; font-family: Inter, system-ui, sans-serif; font-size: 13px; font-weight: 400;
   letter-spacing: 0; text-transform: none; color: var(--ink-dim);
@@ -908,7 +909,7 @@ body[data-open="palm"] .sheetdoor { display: inline; }
 .weight .hero {
   display: block; margin-top: 2px;
   font-family: "Inter Tight", Inter, sans-serif; font-weight: 300; font-style: normal;
-  font-size: clamp(6.4rem, 30vw, 11rem); line-height: 0.84; letter-spacing: -0.045em;
+  font-size: clamp(3.6rem, 20cqi, 9.5rem); line-height: 0.9; letter-spacing: -0.045em;
   font-variant-numeric: tabular-nums; color: #fff;
   animation: palm-in 0.82s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
