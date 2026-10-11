@@ -921,7 +921,42 @@
   window.BriefStop = stopAll;
 
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("sw.js").catch(() => {});
+    navigator.serviceWorker.register("sw.js", { scope: "./", updateViaCache: "none" }).catch(() => {});
+    navigator.serviceWorker.addEventListener("message", (e) => {
+      if (e.data && e.data.type === "VERSION") {
+        const ver = $("ver");
+        if (ver) ver.textContent = String(e.data.version || "").replace("brief-shell-", "") || "v?";
+      }
+    });
+    function askVersion() {
+      navigator.serviceWorker.ready
+        .then((r) => r.active && r.active.postMessage({ type: "VERSION" }))
+        .catch(() => {});
+    }
+    askVersion();
+    setTimeout(askVersion, 2500);
+    navigator.serviceWorker.addEventListener("controllerchange", () => setTimeout(askVersion, 300));
+    const ver = $("ver");
+    if (ver) {
+      ver.addEventListener("click", () => {
+        if (ver.dataset.pulling === "1") {
+          location.reload();
+          return;
+        }
+        ver.dataset.pulling = "1";
+        ver.className = "ver checking";
+        ver.textContent = "pulling";
+        const go = () => location.reload();
+        navigator.serviceWorker.addEventListener("controllerchange", go, { once: true });
+        setTimeout(go, 1200);
+        navigator.serviceWorker.getRegistration().then((r) => {
+          if (!r) return;
+          const skip = () => { if (r.waiting) r.waiting.postMessage({ type: "SKIP_WAITING" }); };
+          r.update().then(skip).catch(() => {});
+          skip();
+        }).catch(() => {});
+      });
+    }
   }
 
   setState("boot");

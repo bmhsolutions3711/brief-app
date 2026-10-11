@@ -128,6 +128,8 @@ body[data-state="pulling"] .why { color: #fff; }
   font-family: Inter, system-ui, sans-serif; font-size: 13px; font-weight: 400;
   text-transform: none;
 }
+.ver.checking { color: #fff; }
+.ver.fresh { color: var(--ok); }
 #pullBtn {
   height: auto; padding: 0; border: none; flex: 0 0 auto;
   margin-left: 12px;

@@ -1,4 +1,11 @@
-const VERSION = "brief-shell-v9";
+const VERSION = "brief-shell-v10";
+
+self.addEventListener("message", (e) => {
+  if (e.data && e.data.type === "VERSION") {
+    e.source && e.source.postMessage({ type: "VERSION", version: VERSION });
+  }
+  if (e.data && e.data.type === "SKIP_WAITING") self.skipWaiting();
+});
 
 self.addEventListener("install", (e) => {
   e.waitUntil(self.skipWaiting());
